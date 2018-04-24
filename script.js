@@ -8,9 +8,13 @@ const drone = new ScaleDrone('paQhhhShd3zfDX0Y');
 // Room name needs to be prefixed with 'observable-'
 const roomName = "observable-" + roomHash;
 const configuration = {
-  iceServers: [{
-    urls: 'stun:stun.l.google.com:19302'
-  }]
+  'iceServers': [{
+    'url': 'stun:stun.services.mozilla.com'
+  },
+  {
+      'url': 'stun:stun.l.google.com:19302'
+  }
+  ]
 };
 let room, pc;
 
@@ -34,13 +38,18 @@ drone.on('open', error => {
   // connected to the room (including us). Signaling server is ready.
   room.on('members', members => {
     console.log('MEMBERS', members);
+    if (members.length > 2) {
+      console.log('Cannot have more than 2 members.');
+      return alert('This room already has 2 members. Please try another time or room.');
+    }
     // If we are the second user to connect to the room we will be creating the offer
     const isOfferer = members.length === 2;
     startWebRTC(isOfferer);
   });
 });
 
-let stop = k => localVideo.srcObject.getTracks().map(t => t.kind == k && t.stop());
+let stopVideoFirstUser = k => localVideo.srcObject.getTracks().map(t => t.kind == k && t.stop()),
+    stopVideoSecondUser = k => remoteVideo.srcObject.getTracks().map(t => t.kind == k && t.stop());
 
 // Send signaling data via Scaledrone
 function sendMessage(message) {
@@ -63,6 +72,7 @@ function startWebRTC(isOfferer) {
 
   // If user is offerer let the 'negotiationneeded' event create the offer
   if (isOfferer) {
+    console.log('Second Person Joins');
     pc.onnegotiationneeded = () => {
       pc.createOffer().then(localDescCreated).catch(onError);
     }
@@ -71,6 +81,11 @@ function startWebRTC(isOfferer) {
   // When a remote stream arrives display it in the #remoteVideo element
   pc.onaddstream = event => {
     remoteVideo.srcObject = event.stream;
+    remoteVideo.onloadedmetadata = function(e) {
+      remoteVideo.play();
+      remoteVideo.muted = true;
+      document.getElementById('second-user').disabled = false;
+  };
   };
 
   navigator.mediaDevices.getUserMedia({
@@ -85,7 +100,7 @@ function startWebRTC(isOfferer) {
       document.getElementById('first-user').disabled = false;
   };
     // Add your stream to be sent to the connecting peer
-    console.log(pc);
+    console.log('Stream->>>', stream);
     pc.addStream(stream);
   }, onError);
 
@@ -114,6 +129,7 @@ function startWebRTC(isOfferer) {
 }
 
 function localDescCreated(desc) {
+  console.log('HERE');
   pc.setLocalDescription(
     desc,
     () => sendMessage({'sdp': pc.localDescription}),
